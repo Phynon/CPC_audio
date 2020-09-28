@@ -28,24 +28,26 @@ def getCriterion(args, downsampling, nSpeakers, nPhones):
             cpcCriterion = cr.NoneCriterion()
         else:
             sizeInputSeq = (args.sizeWindow // downsampling)
-            cpcCriterion = cr.CPCUnsupersivedCriterion(args.nPredicts,
-                                                       args.hiddenGar,
-                                                       args.hiddenEncoder,
-                                                       args.negativeSamplingExt,
-                                                       mode=args.cpc_mode,
-                                                       rnnMode=args.rnnMode,
-                                                       dropout=args.dropout,
-                                                       nSpeakers=nSpeakers,
-                                                       speakerEmbedding=args.speakerEmbedding,
-                                                       sizeInputSeq=sizeInputSeq)
+            cpcCriterion = cr.CPCUnsupersivedCriterion(
+                args.nPredicts,
+                args.hiddenGar,
+                args.hiddenEncoder,
+                args.negativeSamplingExt,
+                mode=args.cpc_mode,
+                rnnMode=args.rnnMode,
+                dropout=args.dropout,
+                nSpeakers=nSpeakers,
+                speakerEmbedding=args.speakerEmbedding,
+                sizeInputSeq=sizeInputSeq)
     elif args.pathPhone is not None:
         if not args.CTC:
             cpcCriterion = cr.PhoneCriterion(dimFeatures,
-                                             nPhones, args.onEncoder,
+                                             nPhones,
+                                             args.onEncoder,
                                              nLayers=args.nLevelsPhone)
         else:
-            cpcCriterion = cr.CTCPhoneCriterion(dimFeatures,
-                                                nPhones, args.onEncoder)
+            cpcCriterion = cr.CTCPhoneCriterion(dimFeatures, nPhones,
+                                                args.onEncoder)
     else:
         cpcCriterion = cr.SpeakerCriterion(dimFeatures, nSpeakers)
     return cpcCriterion
@@ -61,11 +63,7 @@ def loadCriterion(pathCheckpoint, downsampling, nSpeakers, nPhones):
     return criterion
 
 
-def trainStep(dataLoader,
-              cpcModel,
-              cpcCriterion,
-              optimizer,
-              scheduler,
+def trainStep(dataLoader, cpcModel, cpcCriterion, optimizer, scheduler,
               loggingStep):
 
     cpcModel.train()
@@ -104,7 +102,8 @@ def trainStep(dataLoader,
             print(f"Update {step + 1}")
             print(f"elapsed: {elapsed:.1f} s")
             print(
-                f"{1000.0 * elapsed / loggingStep:.1f} ms per batch, {1000.0 * elapsed / n_examples:.1f} ms / example")
+                f"{1000.0 * elapsed / loggingStep:.1f} ms per batch, {1000.0 * elapsed / n_examples:.1f} ms / example"
+            )
             locLogs = utils.update_logs(logs, loggingStep, lastlogs)
             lastlogs = deepcopy(logs)
             utils.show_logs("Training loss", locLogs)
@@ -119,9 +118,7 @@ def trainStep(dataLoader,
     return logs
 
 
-def valStep(dataLoader,
-            cpcModel,
-            cpcCriterion):
+def valStep(dataLoader, cpcModel, cpcCriterion):
 
     cpcCriterion.eval()
     cpcModel.eval()
@@ -155,17 +152,8 @@ def valStep(dataLoader,
     return logs
 
 
-def run(trainDataset,
-        valDataset,
-        batchSize,
-        samplingMode,
-        cpcModel,
-        cpcCriterion,
-        nEpoch,
-        pathCheckpoint,
-        optimizer,
-        scheduler,
-        logs):
+def run(trainDataset, valDataset, batchSize, samplingMode, cpcModel,
+        cpcCriterion, nEpoch, pathCheckpoint, optimizer, scheduler, logs):
 
     print(f"Running {nEpoch} epochs")
     startEpoch = len(logs["epoch"])
@@ -178,14 +166,19 @@ def run(trainDataset,
         print(f"Starting epoch {epoch}")
         utils.cpu_stats()
 
-        trainLoader = trainDataset.getDataLoader(batchSize, samplingMode,
-                                                 True, numWorkers=0)
+        trainLoader = trainDataset.getDataLoader(batchSize,
+                                                 samplingMode,
+                                                 True,
+                                                 numWorkers=0)
 
-        valLoader = valDataset.getDataLoader(batchSize, 'sequential', False,
+        valLoader = valDataset.getDataLoader(batchSize,
+                                             'sequential',
+                                             False,
                                              numWorkers=0)
 
-        print("Training dataset %d batches, Validation dataset %d batches, batch size %d" %
-              (len(trainLoader), len(valLoader), batchSize))
+        print(
+            "Training dataset %d batches, Validation dataset %d batches, batch size %d"
+            % (len(trainLoader), len(valLoader), batchSize))
 
         locLogsTrain = trainStep(trainLoader, cpcModel, cpcCriterion,
                                  optimizer, scheduler, logs["logging_step"])
@@ -233,11 +226,13 @@ def main(args):
         if cdata is not None:
             data, logs, locArgs = cdata
             print(f"Checkpoint detected at {data}")
-            fl.loadArgs(args, locArgs,
-                        forbiddenAttr={"nGPU", "pathCheckpoint",
-                                       "debug", "restart", "world_size",
-                                       "n_nodes", "node_id", "n_gpu_per_node",
-                                       "max_size_loaded"})
+            fl.loadArgs(args,
+                        locArgs,
+                        forbiddenAttr={
+                            "nGPU", "pathCheckpoint", "debug", "restart",
+                            "world_size", "n_nodes", "node_id",
+                            "n_gpu_per_node", "max_size_loaded"
+                        })
             args.load, loadOptimizer = [data], True
             args.loadCriterion = True
 
@@ -315,7 +310,8 @@ def main(args):
 
     # Training criterion
     if args.load is not None and args.loadCriterion:
-        cpcCriterion = loadCriterion(args.load[0], cpcModel.gEncoder.DOWNSAMPLING,
+        cpcCriterion = loadCriterion(args.load[0],
+                                     cpcModel.gEncoder.DOWNSAMPLING,
                                      len(speakers), nPhones)
     else:
         cpcCriterion = getCriterion(args, cpcModel.gEncoder.DOWNSAMPLING,
@@ -332,7 +328,8 @@ def main(args):
     g_params = list(cpcCriterion.parameters()) + list(cpcModel.parameters())
 
     lr = args.learningRate
-    optimizer = torch.optim.Adam(g_params, lr=lr,
+    optimizer = torch.optim.Adam(g_params,
+                                 lr=lr,
                                  betas=(args.beta1, args.beta2),
                                  eps=args.epsilon)
 
@@ -347,6 +344,8 @@ def main(args):
         if not os.path.isdir(args.pathCheckpoint):
             os.mkdir(args.pathCheckpoint)
         args.pathCheckpoint = os.path.join(args.pathCheckpoint, "checkpoint")
+        with open(args.pathCheckpoint + "_args.json", 'w') as file:
+            json.dump(vars(args), file, indent=2)
 
     scheduler = None
     if args.schedulerStep > 0:
@@ -356,10 +355,11 @@ def main(args):
     if args.schedulerRamp is not None:
         n_epoch = args.schedulerRamp
         print(f"Ramp activated. n_e = {n_epoch}")
-        scheduler_ramp = torch.optim.lr_scheduler.LambdaLR(optimizer,
-                                                           lr_lambda=lambda epoch: utils.ramp_scheduling_function(
-                                                               n_epoch, epoch),
-                                                           last_epoch=-1)
+        scheduler_ramp = torch.optim.lr_scheduler.LambdaLR(
+            optimizer,
+            lr_lambda=lambda epoch: utils.ramp_scheduling_function(
+                n_epoch, epoch),
+            last_epoch=-1)
         if scheduler is None:
             scheduler = scheduler_ramp
         else:
@@ -374,16 +374,8 @@ def main(args):
     cpcCriterion = torch.nn.DataParallel(cpcCriterion,
                                          device_ids=range(args.nGPU)).cuda()
 
-    run(trainDataset,
-        valDataset,
-        batchSize,
-        args.samplingType,
-        cpcModel,
-        cpcCriterion,
-        args.nEpoch,
-        args.pathCheckpoint,
-        optimizer,
-        scheduler,
+    run(trainDataset, valDataset, batchSize, args.samplingType, cpcModel,
+        cpcCriterion, args.nEpoch, args.pathCheckpoint, optimizer, scheduler,
         logs)
 
 
@@ -395,68 +387,104 @@ def parseArgs(argv):
     parser = set_default_cpc_config(parser)
 
     group_db = parser.add_argument_group('Dataset')
-    group_db.add_argument('--pathDB', type=str, default=None,
+    group_db.add_argument('--pathDB',
+                          type=str,
+                          default=None,
                           help='Path to the directory containing the '
                           'data.')
-    group_db.add_argument('--file_extension', type=str, default=".flac",
+    group_db.add_argument('--file_extension',
+                          type=str,
+                          default=".flac",
                           help="Extension of the audio files in the dataset.")
-    group_db.add_argument('--pathTrain', type=str, default=None,
-                          help='Path to a .txt file containing the list of the '
-                          'training sequences.')
-    group_db.add_argument('--pathVal', type=str, default=None,
-                          help='Path to a .txt file containing the list of the '
-                          'validation sequences.')
-    group_db.add_argument('--n_process_loader', type=int, default=8,
+    group_db.add_argument(
+        '--pathTrain',
+        type=str,
+        default=None,
+        help='Path to a .txt file containing the list of the '
+        'training sequences.')
+    group_db.add_argument(
+        '--pathVal',
+        type=str,
+        default=None,
+        help='Path to a .txt file containing the list of the '
+        'validation sequences.')
+    group_db.add_argument('--n_process_loader',
+                          type=int,
+                          default=8,
                           help='Number of processes to call to load the '
                           'dataset')
-    group_db.add_argument('--ignore_cache', action='store_true',
+    group_db.add_argument('--ignore_cache',
+                          action='store_true',
                           help='Activate if the dataset has been modified '
                           'since the last training session.')
-    group_db.add_argument('--max_size_loaded', type=int, default=4000000000,
+    group_db.add_argument('--max_size_loaded',
+                          type=int,
+                          default=4000000000,
                           help='Maximal amount of data (in byte) a dataset '
                           'can hold in memory at any given time')
     group_supervised = parser.add_argument_group(
         'Supervised mode (depreciated)')
-    group_supervised.add_argument('--supervised', action='store_true',
-                                  help='(Depreciated) Disable the CPC loss and activate '
-                                  'the supervised mode. By default, the supervised '
-                                  'training method is the speaker classification.')
-    group_supervised.add_argument('--pathPhone', type=str, default=None,
-                                  help='(Supervised mode only) Path to a .txt '
-                                  'containing the phone labels of the dataset. If given '
-                                  'and --supervised, will train the model using a '
-                                  'phone classification task.')
+    group_supervised.add_argument(
+        '--supervised',
+        action='store_true',
+        help='(Depreciated) Disable the CPC loss and activate '
+        'the supervised mode. By default, the supervised '
+        'training method is the speaker classification.')
+    group_supervised.add_argument(
+        '--pathPhone',
+        type=str,
+        default=None,
+        help='(Supervised mode only) Path to a .txt '
+        'containing the phone labels of the dataset. If given '
+        'and --supervised, will train the model using a '
+        'phone classification task.')
     group_supervised.add_argument('--CTC', action='store_true')
 
     group_save = parser.add_argument_group('Save')
-    group_save.add_argument('--pathCheckpoint', type=str, default=None,
+    group_save.add_argument('--pathCheckpoint',
+                            type=str,
+                            default=None,
                             help="Path of the output directory.")
     group_save.add_argument('--logging_step', type=int, default=1000)
-    group_save.add_argument('--save_step', type=int, default=5,
+    group_save.add_argument('--save_step',
+                            type=int,
+                            default=5,
                             help="Frequency (in epochs) at which a checkpoint "
                             "should be saved")
 
     group_load = parser.add_argument_group('Load')
-    group_load.add_argument('--load', type=str, default=None, nargs='*',
-                            help="Load an exsiting checkpoint. Should give a path "
-                            "to a .pt file. The directory containing the file to "
-                            "load should also have a 'checkpoint.logs' and a "
-                            "'checkpoint.args'")
-    group_load.add_argument('--loadCriterion', action='store_true',
-                            help="If --load is activated, load the state of the "
-                            "training criterion as well as the state of the "
-                            "feature network (encoder + AR)")
-    group_load.add_argument('--restart', action='store_true',
+    group_load.add_argument(
+        '--load',
+        type=str,
+        default=None,
+        nargs='*',
+        help="Load an exsiting checkpoint. Should give a path "
+        "to a .pt file. The directory containing the file to "
+        "load should also have a 'checkpoint.logs' and a "
+        "'checkpoint.args'")
+    group_load.add_argument(
+        '--loadCriterion',
+        action='store_true',
+        help="If --load is activated, load the state of the "
+        "training criterion as well as the state of the "
+        "feature network (encoder + AR)")
+    group_load.add_argument('--restart',
+                            action='store_true',
                             help="If any checkpoint is found, ignore it and "
                             "restart the training from scratch.")
 
     group_gpu = parser.add_argument_group('GPUs')
-    group_gpu.add_argument('--nGPU', type=int, default=-1,
+    group_gpu.add_argument('--nGPU',
+                           type=int,
+                           default=-1,
                            help="Number of GPU to use (default: use all "
                            "available GPUs)")
-    group_gpu.add_argument('--batchSizeGPU', type=int, default=8,
+    group_gpu.add_argument('--batchSizeGPU',
+                           type=int,
+                           default=8,
                            help='Number of batches per GPU.')
-    parser.add_argument('--debug', action='store_true',
+    parser.add_argument('--debug',
+                        action='store_true',
                         help="Load only a very small amount of files for "
                         "debugging purposes.")
     args = parser.parse_args(argv)
