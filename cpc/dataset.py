@@ -18,7 +18,6 @@ import torchaudio
 
 
 class AudioBatchData(Dataset):
-
     def __init__(self,
                  path,
                  sizeWindow,
@@ -32,12 +31,11 @@ class AudioBatchData(Dataset):
             - path (string): path to the training dataset
             - sizeWindow (int): size of the sliding window
             - seqNames (list): sequences to load
-            - phoneLabelsDict (dictionnary): if not None, a dictionnary with the
-                                             following entries
-
+            - phoneLabelsDict (dictionnary): if not None, a dictionnary with
+                                             the following entries
                                              "step": size of a labelled window
-                                             "$SEQ_NAME": list of phonem labels for
-                                             the sequence $SEQ_NAME
+                                             "$SEQ_NAME": list of phonem labels
+                                             for the sequence $SEQ_NAME
            - nSpeakers (int): number of speakers to expect.
            - nProcessLoader (int): number of processes to call when loading the
                                    data from the disk
@@ -175,8 +173,8 @@ class AudioBatchData(Dataset):
         return self.phoneLabels[idPhone:(idPhone + self.phoneStep)]
 
     def getSpeakerLabel(self, idx):
-        idSpeaker = next(x[0] for x in enumerate(
-            self.speakerLabel) if x[1] > idx) - 1
+        idSpeaker = next(
+            x[0] for x in enumerate(self.speakerLabel) if x[1] > idx) - 1
         return idSpeaker
 
     def __len__(self):
@@ -218,13 +216,16 @@ class AudioBatchData(Dataset):
             return SameSpeakerSampler(batchSize, self.seqLabel,
                                       self.sizeWindow, offset)
         if type == "sequential":
-            return SequentialSampler(len(self.data), self.sizeWindow,
-                                     offset, batchSize)
-        sampler = UniformAudioSampler(len(self.data), self.sizeWindow,
-                                      offset)
+            return SequentialSampler(len(self.data), self.sizeWindow, offset,
+                                     batchSize)
+        sampler = UniformAudioSampler(len(self.data), self.sizeWindow, offset)
         return BatchSampler(sampler, batchSize, True)
 
-    def getDataLoader(self, batchSize, type, randomOffset, numWorkers=0,
+    def getDataLoader(self,
+                      batchSize,
+                      type,
+                      randomOffset,
+                      numWorkers=0,
                       onLoop=-1):
         r"""
         Get a batch sampler for the current dataset.
@@ -276,12 +277,7 @@ class AudioLoader(object):
     audio it loads sequentially in memory: once all batches have been sampled
     on a chunk, the AudioBatchData loads the next one.
     """
-    def __init__(self,
-                 dataset,
-                 samplerCall,
-                 nLoop,
-                 updateCall,
-                 size,
+    def __init__(self, dataset, samplerCall, nLoop, updateCall, size,
                  numWorkers):
         r"""
         Args:
@@ -316,11 +312,7 @@ class AudioLoader(object):
 
 
 class UniformAudioSampler(Sampler):
-
-    def __init__(self,
-                 dataSize,
-                 sizeWindow,
-                 offset):
+    def __init__(self, dataSize, sizeWindow, offset):
 
         self.len = dataSize // sizeWindow
         self.sizeWindow = sizeWindow
@@ -329,42 +321,39 @@ class UniformAudioSampler(Sampler):
             self.len -= 1
 
     def __iter__(self):
-        return iter((self.offset
-                     + self.sizeWindow * torch.randperm(self.len)).tolist())
+        return iter((self.offset +
+                     self.sizeWindow * torch.randperm(self.len)).tolist())
 
     def __len__(self):
         return self.len
 
 
 class SequentialSampler(Sampler):
-
     def __init__(self, dataSize, sizeWindow, offset, batchSize):
 
         self.len = (dataSize // sizeWindow) // batchSize
         self.sizeWindow = sizeWindow
         self.offset = offset
-        self.startBatches = [x * (dataSize // batchSize)
-                             for x in range(batchSize)]
+        self.startBatches = [
+            x * (dataSize // batchSize) for x in range(batchSize)
+        ]
         self.batchSize = batchSize
         if self.offset > 0:
             self.len -= 1
 
     def __iter__(self):
         for idx in range(self.len):
-            yield [self.offset + self.sizeWindow * idx
-                   + start for start in self.startBatches]
+            yield [
+                self.offset + self.sizeWindow * idx + start
+                for start in self.startBatches
+            ]
 
     def __len__(self):
         return self.len
 
 
 class SameSpeakerSampler(Sampler):
-
-    def __init__(self,
-                 batchSize,
-                 samplingIntervals,
-                 sizeWindow,
-                 offset):
+    def __init__(self, batchSize, samplingIntervals, sizeWindow, offset):
 
         self.samplingIntervals = samplingIntervals
         self.sizeWindow = sizeWindow
@@ -375,9 +364,10 @@ class SameSpeakerSampler(Sampler):
             raise AttributeError("Sampling intervals should start at zero")
 
         nWindows = len(self.samplingIntervals) - 1
-        self.sizeSamplers = [(self.samplingIntervals[i+1] -
-                              self.samplingIntervals[i]) // self.sizeWindow
-                             for i in range(nWindows)]
+        self.sizeSamplers = [
+            (self.samplingIntervals[i + 1] - self.samplingIntervals[i]) //
+            self.sizeWindow for i in range(nWindows)
+        ]
 
         if self.offset > 0:
             self.sizeSamplers = [max(0, x - 1) for x in self.sizeSamplers]
@@ -391,8 +381,10 @@ class SameSpeakerSampler(Sampler):
             indexStart, sizeSampler = 0, self.sizeSamplers[indexSampler]
             while indexStart < sizeSampler:
                 indexEnd = min(sizeSampler, indexStart + self.batchSize)
-                locBatch = [self.getIndex(x, indexSampler)
-                            for x in randperm[indexStart:indexEnd]]
+                locBatch = [
+                    self.getIndex(x, indexSampler)
+                    for x in randperm[indexStart:indexEnd]
+                ]
                 indexStart = indexEnd
                 self.batches.append(locBatch)
 
@@ -414,10 +406,7 @@ def extractLength(couple):
     return info.length
 
 
-def findAllSeqs(dirName,
-                extension='.flac',
-                loadCache=False,
-                speaker_level=1):
+def findAllSeqs(dirName, extension='.flac', loadCache=False, speaker_level=1):
     r"""
     Lists all the sequences with the given extension in the dirName directory.
     Output:
@@ -471,8 +460,8 @@ def findAllSeqs(dirName,
         filtered_files = [f for f in filenames if f.endswith(extension)]
 
         if len(filtered_files) > 0:
-            speakerStr = (os.sep).join(
-                root[prefixSize:].split(os.sep)[:speaker_level])
+            speakerStr = (os.sep).join(root[prefixSize:].split(
+                os.sep)[:speaker_level])
             if speakerStr not in speakersTarget:
                 speakersTarget[speakerStr] = len(speakersTarget)
             speaker = speakersTarget[speakerStr]
@@ -518,3 +507,85 @@ def filterSeqs(pathTxt, seqCouples):
         if seq == inSeqs[index]:
             output.append(x)
     return output
+
+
+class SeqBatchData(Dataset):
+    def __init__(self,
+                 path,
+                 size_window,
+                 seq_names,
+                 n_speakers):
+        """
+        Args:
+            - path (string): path to the training dataset
+            - sizeWindow (int): size of the sliding window
+            - seqNames (list): sequences to load
+            - nSpeakers (int): number of speakers to expect.
+            - nProcessLoader (int): number of processes to call when loading
+                                    the data from the disk
+        """
+
+        self.db_path = Path(path)
+        self.size_window = size_window
+        self.seq_names = [(s, self.db_path / x) for s, x in seq_names]
+        self.speakers = list(range(n_speakers))
+
+    def getLangLabel(self, index):
+        return self.seq_names[index][0][0:5]
+
+    def __len__(self):
+        return len(self.seq_names) - 1
+
+    def __getitem__(self, idx):
+
+        if idx < 0 or idx >= len(self.seq_names):
+            print(idx)
+        _, seq_name, seq_data = loadFile(self.seq_names[idx])
+        split_data = []
+        for i in range(0, int(seq_data // self.size_window), self.size_window):
+            split_data.append(seq_data[i:i + self.size_window].view(1, -1))
+        split_data = torch.tensor(split_data, dtype=torch.long)
+        label = torch.tensor(self.getLangLabel(idx), dtype=torch.long)
+        seq_data = torch.tensor(seq_data, dtype=torch.long)
+
+        return seq_data, split_data, label
+
+    def getNSpeakers(self):
+        return len(self.speakers)
+
+    def getDataLoader(self,
+                      batchSize,
+                      type,
+                      randomOffset,
+                      numWorkers=0,
+                      onLoop=-1):
+        r"""
+        Get a batch sampler for the current dataset.
+        Args:
+            - batchSize (int): batch size
+            - groupSize (int): in the case of type in ["speaker", "sequence"]
+            number of items sharing a same label in the group
+            (see AudioBatchSampler)
+            - type (string):
+                type == "speaker": grouped sampler speaker-wise
+                type == "sequence": grouped sampler sequence-wise
+                type == "sequential": sequential sampling
+                else: uniform random sampling of the full audio
+                vector
+            - randomOffset (bool): if True add a random offset to the sampler
+                                   at the begining of each iteration
+        """
+        nLoops = len(self.packageIndex)
+        totSize = self.totSize // (self.sizeWindow * batchSize)
+        if onLoop >= 0:
+            self.currentPack = onLoop - 1
+            self.loadNextPack()
+            nLoops = 1
+
+        def samplerCall():
+            offset = random.randint(0, self.sizeWindow // 2) \
+                if randomOffset else 0
+            return self.getBaseSampler(type, batchSize, offset)
+
+        return AudioLoader(self, samplerCall, nLoops, self.loadNextPack,
+                           totSize, numWorkers)
